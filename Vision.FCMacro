@@ -43,9 +43,9 @@ class VisibilityToolBox(QtGui.QDockWidget):
         self.so.selectionChanged.connect(self.selChanged)
         if __KBSC__:
             self.ko = self.KeyObserver()
-            try:
+            if Gui.activeView() != None:
                 self.koc = Gui.activeView().addEventCallback("SoKeyboardEvent", self.ko.keyChanged)
-            except:
+            else:
                 App.Console.PrintError("\nFailed to enable keyboard shortcut, a model shall be opened before running the macro")
             self.ko.toggleState.connect(self.toggleState)
 
@@ -75,6 +75,10 @@ class VisibilityToolBox(QtGui.QDockWidget):
         self.sliUser.valueChanged.connect(self.changeUser)
         self.sliUser.sliderReleased.connect(self.clearSliUser)
         self.lay.addWidget(self.sliUser)
+        
+        self.butVis = QtGui.QPushButton("Vis")
+        self.butVis.clicked.connect(self.allVisible)
+        self.lay.addWidget(self.butVis)
 
         self.wid.setLayout(self.lay)
         self.setWidget(self.wid)
@@ -100,7 +104,7 @@ class VisibilityToolBox(QtGui.QDockWidget):
         if not obj == None:
             if hasattr(obj,'ViewObject'):
                 if hasattr(obj.ViewObject,'Transparency'):
-                    if obj.ViewObject.Transparency == 95-self.sliAll.value()*5:
+                    if obj.ViewObject.Transparency != 95-self.sliUser.value()*5:
                         obj.ViewObject.Transparency = 95-self.sliUser.value()*5
                     else:
                         obj.ViewObject.Transparency = 95-self.sliAll.value()*5
@@ -118,6 +122,27 @@ class VisibilityToolBox(QtGui.QDockWidget):
             self.butToggle.setStyleSheet("background-color: red;") 
             Gui.Selection.removeObserver(self.so)
         self.butToggle.clearFocus()
+
+    def allVisible(self):
+        for obj in App.ActiveDocument.RootObjects:
+            self.makeVisible(obj)
+
+    def makeVisible(self, obj):
+        if str(obj) == "<Part::PartFeature>":
+            obj.ViewObject.Visibility = True
+        elif str(obj) == "<body object>":
+            obj.ViewObject.Visibility = True
+            pdFuncs = [subobj for subobj in obj.OutList if str(subobj)[:13]=="<PartDesign::"]
+            if len(pdFuncs) > 0:
+                pdFuncs[-1].ViewObject.Visibility = True
+        elif str(obj) == "<Part object>":
+            obj.ViewObject.Visibility = True
+            for subobj in obj.OutList:
+                self.makeVisible(subobj)
+        elif str(obj) == "<App::Origin object>":
+            pass
+        else:
+            App.Console.PrintWarning("Unsupported type of object : " + str(obj))
 
     if __KBSC__:
         def toggleState(self, state):
