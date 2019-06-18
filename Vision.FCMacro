@@ -1,0 +1,150 @@
+from PySide import QtCore, QtGui
+
+__KBSC__ = True
+
+class VisibilityToolBox(QtGui.QDockWidget):
+#####
+    class SelObserver(QtCore.QObject):
+        selectionChanged = QtCore.Signal(str)
+
+        def __init__(self):
+            super(VisibilityToolBox.SelObserver, self).__init__()
+
+        def addSelection(self,document, object, element, position):
+            self.selectionChanged.emit(object)
+#####
+    if __KBSC__:
+        class KeyObserver(QtCore.QObject):
+            toggleState = QtCore.Signal(bool)
+    
+            def __init__(self):
+                super(VisibilityToolBox.KeyObserver, self).__init__()
+                self.toggle = False
+    
+            def keyChanged(self, info):
+                if ((info['CtrlDown'] and info['Key'] == 'SHIFT') or (info['ShiftDown'] and info['Key'] == 'CONTROL')) and not info['AltDown'] and info['State'] == 'DOWN':
+                    toggle = True
+                else:
+                    toggle = False
+                if toggle != self.toggle:
+                    self.toggle = toggle
+                    self.toggleState.emit(self.toggle)
+#####
+    def __init__(self):
+        if Gui.getMainWindow().findChild(QtGui.QWidget, "VisTB"):    
+            raise Exception("Already running")     
+        super(VisibilityToolBox, self).__init__()
+        self.setParent(Gui.getMainWindow())
+        self.setObjectName("VisTB")
+        self.setWindowTitle("VisTB")
+        self.initGui()
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+        self.so = self.SelObserver()
+        self.so.selectionChanged.connect(self.selChanged)
+        if __KBSC__:
+            self.ko = self.KeyObserver()
+            try:
+                self.koc = Gui.activeView().addEventCallback("SoKeyboardEvent", self.ko.keyChanged)
+            except:
+                App.Console.PrintError("\nFailed to enable keyboard shortcut, a model shall be opened before running the macro")
+            self.ko.toggleState.connect(self.toggleState)
+
+    def initGui(self):
+        self.wid = QtGui.QWidget()
+        self.lay = QtGui.QVBoxLayout()
+
+        self.labAll = QtGui.QLabel("All")
+        self.lay.addWidget(self.labAll)
+        self.sliAll = QtGui.QSlider()
+        self.sliAll.setRange(0, 19)
+        self.sliAll.setValue(19)
+        self.sliAll.valueChanged.connect(self.changeAll)
+        self.sliAll.sliderReleased.connect(self.clearSliAll)
+        self.lay.addWidget(self.sliAll)
+
+        self.labUser = QtGui.QLabel("User")
+        self.lay.addWidget(self.labUser)
+        self.butToggle = QtGui.QPushButton("Off")
+        self.natState = False
+        self.butToggle.setStyleSheet("background-color: red;") 
+        self.butToggle.clicked.connect(self.userToggle)
+        self.lay.addWidget(self.butToggle)
+        self.sliUser = QtGui.QSlider()
+        self.sliUser.setRange(0, 19)
+        self.sliUser.setValue(9)
+        self.sliUser.valueChanged.connect(self.changeUser)
+        self.sliUser.sliderReleased.connect(self.clearSliUser)
+        self.lay.addWidget(self.sliUser)
+
+        self.wid.setLayout(self.lay)
+        self.setWidget(self.wid)
+        for chi in self.wid.children():
+            self.lay.setAlignment(chi, QtCore.Qt.AlignHCenter)
+        self.setMinimumHeight(250)
+        self.setFixedWidth(50)
+        self.move(Gui.getMainWindow().frameGeometry().center().x(), Gui.getMainWindow().frameGeometry().top()+100)
+            
+    def closeEvent(self, event):
+        try:
+            Gui.Selection.removeObserver(self.so)
+        except:
+            pass
+        if __KBSC__:
+            try:
+                Gui.activeView().removeEventCallback("SoKeyboardEvent", self.koc)
+            except:
+                pass
+
+    def selChanged(self, objName):
+        obj = App.ActiveDocument.getObject(objName)
+        if not obj == None:
+            if hasattr(obj,'ViewObject'):
+                if hasattr(obj.ViewObject,'Transparency'):
+                    if obj.ViewObject.Transparency == 95-self.sliAll.value()*5:
+                        obj.ViewObject.Transparency = 95-self.sliUser.value()*5
+                    else:
+                        obj.ViewObject.Transparency = 95-self.sliAll.value()*5
+        Gui.Selection.clearSelection()
+
+    def userToggle(self):
+        if not self.natState:
+            self.natState = True
+            self.butToggle.setText("On")
+            self.butToggle.setStyleSheet("background-color: green;") 
+            Gui.Selection.addObserver(self.so)
+        else:
+            self.natState = False
+            self.butToggle.setText("Off")
+            self.butToggle.setStyleSheet("background-color: red;") 
+            Gui.Selection.removeObserver(self.so)
+        self.butToggle.clearFocus()
+
+    if __KBSC__:
+        def toggleState(self, state):
+            if not self.natState and state or self.natState and not state:
+                self.butToggle.setText("On")
+                self.butToggle.setStyleSheet("background-color: green;") 
+                Gui.Selection.addObserver(self.so)
+            else:
+                self.butToggle.setText("Off")
+                self.butToggle.setStyleSheet("background-color: red;") 
+                Gui.Selection.removeObserver(self.so)
+
+    def changeAll(self, alpha):
+        self.labAll.setText(str(5+alpha*5) + " %")
+        for obj in App.ActiveDocument.Objects:
+            if hasattr(obj,'ViewObject'):
+                if hasattr(obj.ViewObject,'Transparency'):
+                    obj.ViewObject.Transparency = 95-alpha*5
+
+    def clearSliAll(self):
+        self.labAll.setText("All")
+
+    def changeUser(self, alpha):
+        self.labUser.setText(str(5+alpha*5) + " %")
+
+    def clearSliUser(self):
+        self.labUser.setText("User")
+
+visTB = VisibilityToolBox()
+visTB.show()
