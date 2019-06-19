@@ -81,12 +81,15 @@ class VisibilityToolBox(QtGui.QDockWidget):
         self.lay.addWidget(self.butVis)
 
         self.wid.setLayout(self.lay)
+        self.lay.setSpacing(0)
+        self.lay.setContentsMargins(0, 0, 0, 0)
+        
         self.setWidget(self.wid)
         for chi in self.wid.children():
             self.lay.setAlignment(chi, QtCore.Qt.AlignHCenter)
         self.setMinimumHeight(250)
         self.setFixedWidth(50)
-        self.move(Gui.getMainWindow().frameGeometry().center().x(), Gui.getMainWindow().frameGeometry().top()+100)
+        self.move(Gui.getMainWindow().frameGeometry().center().x() - Gui.getMainWindow().frameGeometry().left(), 100)
             
     def closeEvent(self, event):
         try:
@@ -100,15 +103,18 @@ class VisibilityToolBox(QtGui.QDockWidget):
                 pass
 
     def selChanged(self, objName):
-        obj = App.ActiveDocument.getObject(objName)
-        if not obj == None:
-            if hasattr(obj,'ViewObject'):
-                if hasattr(obj.ViewObject,'Transparency'):
-                    if obj.ViewObject.Transparency != 95-self.sliUser.value()*5:
-                        obj.ViewObject.Transparency = 95-self.sliUser.value()*5
-                    else:
-                        obj.ViewObject.Transparency = 95-self.sliAll.value()*5
-        Gui.Selection.clearSelection()
+        if Gui.activeWorkbench().name() in ["PartDesignWorkbench" , "PartWorkbench", "ArchWorkbench"]:
+            obj = App.ActiveDocument.getObject(objName)
+            if not obj == None:
+                if hasattr(obj,'ViewObject'):
+                    if hasattr(obj.ViewObject,'Transparency'):
+                        if obj.ViewObject.Transparency != 95-self.sliUser.value()*5:
+                            obj.ViewObject.Transparency = 95-self.sliUser.value()*5
+                        else:
+                            obj.ViewObject.Transparency = 95-self.sliAll.value()*5
+            Gui.Selection.clearSelection()
+        elif self.natState == True:
+            self.userToggle()
 
     def userToggle(self):
         if not self.natState:
