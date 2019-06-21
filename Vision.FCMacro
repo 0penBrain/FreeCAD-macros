@@ -143,7 +143,8 @@ class VisibilityToolBox(QtGui.QDockWidget):
                 pdFuncs[-1].ViewObject.Visibility = True
         elif str(obj) == "<Part object>":
             obj.ViewObject.Visibility = True
-            for subobj in obj.OutList:
+#            for subobj in obj.OutList:
+            for subobj in [dc for dc in obj.OutList if dc not in [ol for ll in obj.OutList for ol in ll.OutList]]:
                 self.makeVisible(subobj)
         elif str(obj) == "<App::Origin object>":
             pass
