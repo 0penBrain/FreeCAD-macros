@@ -1,0 +1,158 @@
+from PySide2 import QtCore, QtWidgets
+import FreeCADGui as Gui
+
+MSG = App.Console.PrintMessage
+
+class MyDialog(QtWidgets.QDialog):
+
+    class MyDocObs():
+
+        def __init__(self, msg_callback = None):
+            self.msgcb = msg_callback
+
+        def callb(self, msg):
+            if self.msgcb:
+                self.msgcb(msg)
+
+        def slotCreatedDocument(self, doc):
+            self.callb(f'New document created : {doc.Document.Name}')
+
+        def slotDeletedDocument(self, doc):
+            self.callb(f'Document deleted : {doc.Document.Name}')
+
+        def slotCreatedObject(self, obj):
+            self.callb(f'New object created in doc {obj.Object.Document.Name} : {obj.Object.Name}')
+
+        def slotDeletedObject(self, obj):
+            self.callb(f'Object deleted in doc {obj.Object.Document.Name} : {obj.Object.Name}')
+
+#        def slotChangedObject(self, obj, prop):
+#            self.callb(f'Property changed in obj {obj.Object.Name} of doc {obj.Object.Document.Name} : {prop}')
+
+    class MySelObs(QtCore.QObject):
+
+        preselection = QtCore.Signal(str)
+        selection = QtCore.Signal(str)
+        clear = QtCore.Signal(str)
+
+        def __init__(self):
+            super().__init__()
+
+        def setPreselection(self,doc,obj,sub):
+            self.preselection.emit(f'Preselection of {sub} of object {obj}')
+    
+        def addSelection(self,doc,obj,sub,pnt):
+            self.selection.emit(f'Object {obj} added to selection')
+    
+        def clearSelection(self,doc):
+            self.clear.emit(f'Selection cleared in document {doc}')
+
+    def __init__(self, parent=Gui.getMainWindow()):
+        super().__init__(parent, QtCore.Qt.Tool)
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
+        self.setAttribute(QtCore.Qt.WA_WindowPropagation, True)
+        self.initUI()
+
+        self.writeLog('Init terminated')
+
+        if Gui.activeView() and repr(Gui.activeView()) == 'View3DInventor':
+            self.view = Gui.activeView()
+            self.view_callback = self.view.addEventCallback('SoEvent', self.viewObsCB)
+            self.writeLog('ViewObserver set')
+        else:
+            self.writeLog('ViewObserver cannot be set, no active 3D view')
+
+        self.doc_observer = self.MyDocObs(self.doc_callback)
+        Gui.addDocumentObserver(self.doc_observer)
+
+        self.sel_observer = self.MySelObs()
+        self.sel_observer.preselection.connect(self.writeSel)
+        self.sel_observer.selection.connect(self.writeSel)
+        self.sel_observer.clear.connect(self.writeSel)
+        Gui.Selection.addObserver(self.sel_observer)
+
+    def initUI(self):
+        self.setWindowTitle('My Super Dialog')
+        
+        my_lay = QtWidgets.QGridLayout(self)
+        self.setLayout(my_lay)
+
+        my_doc_ob_w = QtWidgets.QWidget(self)
+        my_lay.addWidget(my_doc_ob_w, 0, 0)
+        my_sel_ob_w = QtWidgets.QWidget(self)
+        my_lay.addWidget(my_sel_ob_w, 0, 1)
+        my_view_ob_w = QtWidgets.QWidget(self)
+        my_lay.addWidget(my_view_ob_w, 1, 0)
+        my_log_w = QtWidgets.QWidget(self)
+        my_lay.addWidget(my_log_w, 1, 1)
+        my_button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self)
+        my_lay.addWidget(my_button_box, 2, 0, 1, -1)
+
+        my_doc_ob_lay = QtWidgets.QVBoxLayout(my_doc_ob_w)
+        my_doc_ob_w.setLayout(my_doc_ob_lay)
+        my_doc_ob_lay.addWidget(QtWidgets.QLabel('Document observer:', my_doc_ob_w))
+        self.my_doc_ob = QtWidgets.QPlainTextEdit(my_doc_ob_w)
+        self.my_doc_ob.setReadOnly(True)
+        self.my_doc_ob.setMaximumBlockCount(100)
+        my_doc_ob_lay.addWidget(self.my_doc_ob)
+
+        my_sel_ob_lay = QtWidgets.QVBoxLayout(my_sel_ob_w)
+        my_sel_ob_w.setLayout(my_sel_ob_lay)
+        my_sel_ob_lay.addWidget(QtWidgets.QLabel('Selection observer:', my_sel_ob_w))
+        self.my_sel_ob = QtWidgets.QPlainTextEdit(my_sel_ob_w)
+        self.my_sel_ob.setReadOnly(True)
+        self.my_sel_ob.setMaximumBlockCount(100)
+        my_sel_ob_lay.addWidget(self.my_sel_ob)
+
+        my_view_ob_lay = QtWidgets.QVBoxLayout(my_view_ob_w)
+        my_view_ob_w.setLayout(my_view_ob_lay)
+        my_view_ob_lay.addWidget(QtWidgets.QLabel('View observer:', my_view_ob_w))
+        self.my_view_ob = QtWidgets.QPlainTextEdit(my_view_ob_w)
+        self.my_view_ob.setReadOnly(True)
+        self.my_view_ob.setMaximumBlockCount(100)
+        my_view_ob_lay.addWidget(self.my_view_ob)
+
+        my_log_lay = QtWidgets.QVBoxLayout(my_log_w)
+        my_log_w.setLayout(my_log_lay)
+        my_log_lay.addWidget(QtWidgets.QLabel('Log:', my_log_w))
+        self.my_log = QtWidgets.QPlainTextEdit(my_log_w)
+        self.my_log.setReadOnly(True)
+        self.my_log.setMaximumBlockCount(100)
+        my_log_lay.addWidget(self.my_log)
+
+        my_button_box.accepted.connect(self.accept)
+        my_button_box.rejected.connect(self.reject)
+
+    def viewObsCB(self, info):
+        self.view_log_cnt = self.view_log_cnt+1 if hasattr(self, 'view_log_cnt') else 0
+        self.my_view_ob.appendPlainText(f'{self.view_log_cnt} : Event received of type : {info["Type"]} at position {info["Position"]}')
+
+    def writeLog(self, text):
+        curr_time = QtCore.QTime.currentTime().toString('hh:mm:ss')
+        self.my_log.appendPlainText(f'{curr_time} : {text}')
+
+    def doc_callback(self, text):
+        self.my_doc_ob.appendPlainText(text)
+
+    def writeSel(self, text):
+        self.my_sel_ob.appendPlainText(text)
+
+    def accept(self):
+        MSG('Good bye\n')
+        super().accept()
+
+    def reject(self):
+        self.writeLog('Why did you try to reject me ? Not possible.')
+
+    def hideEvent(self, event):
+        if hasattr(self, 'view_callback'):
+            try:
+                self.view.removeEventCallback('SoEvent', self.view_callback)
+            except RuntimeError:
+                pass
+        Gui.removeDocumentObserver(self.doc_observer)
+        Gui.Selection.removeObserver(self.sel_observer)
+        super().hideEvent(event)
+        
+
+MyDialog().show()
