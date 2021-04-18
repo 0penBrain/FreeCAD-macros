@@ -71,14 +71,7 @@ class MyDialog(QtWidgets.QDialog):
 
         self.writeLog('Init terminated')
 
-        ## In FC, a view observer is obtained by registering a callback in a specific view (3D/Inventor)
-        ## Once registered, the callback will be called on specific events with event info as parameter
-        if Gui.activeView() and repr(Gui.activeView()) == 'View3DInventor':
-            self.view = Gui.activeView()
-            self.view_callback = self.view.addEventCallback('SoEvent', self.viewObsCB) # Register the view observer callback
-            self.writeLog('ViewObserver set')
-        else:
-            self.writeLog('ViewObserver cannot be set, no active 3D view')
+        self.attachViewObs() # Here we use a function as we want to be able to change view attachment later
 
         ## In FC, a document observer is obtained by registering in the GUI instance a class instance ...
         ## ... whose methods will be called on specific events based on their names
@@ -134,7 +127,11 @@ class MyDialog(QtWidgets.QDialog):
         ## Same for View observer
         my_view_ob_lay = QtWidgets.QVBoxLayout(my_view_ob_w)
         my_view_ob_w.setLayout(my_view_ob_lay)
-        my_view_ob_lay.addWidget(QtWidgets.QLabel('View observer:', my_view_ob_w))
+        my_view_ob_inter_lay = QtWidgets.QHBoxLayout(my_view_ob_w) # Here we use direct layouts nesting ...
+        my_view_ob_inter_lay.addWidget(QtWidgets.QLabel('View observer:', my_view_ob_w))
+        self.my_view_ob_pushbut = QtWidgets.QPushButton('Attach to current view',my_view_ob_w)
+        my_view_ob_inter_lay.addWidget(self.my_view_ob_pushbut)
+        my_view_ob_lay.addLayout(my_view_ob_inter_lay) # ... clearly visible here
         self.my_view_ob = QtWidgets.QPlainTextEdit(my_view_ob_w)
         self.my_view_ob.setReadOnly(True)
         self.my_view_ob.setMaximumBlockCount(100)
@@ -149,9 +146,21 @@ class MyDialog(QtWidgets.QDialog):
         self.my_log.setMaximumBlockCount(100)
         my_log_lay.addWidget(self.my_log)
 
+        self.my_view_ob_pushbut.clicked.connect(self.attachViewObs) # Connect view observer attacher button
         ## Connect the button box buttons signals to the dialog (self) slots
         my_button_box.accepted.connect(self.accept)
         my_button_box.rejected.connect(self.reject)
+
+    def attachViewObs(self):
+        """This method tries to attach a view observer to the active view then report status"""
+        ## In FC, a view observer is obtained by registering a callback in a specific view (3D/Inventor)
+        ## Once registered, the callback will be called on specific events with event info as parameter
+        if Gui.activeView() and repr(Gui.activeView()) == 'View3DInventor':
+            self.view = Gui.activeView()
+            self.view_callback = self.view.addEventCallback('SoEvent', self.viewObsCB) # Register the view observer callback
+            self.writeLog('ViewObserver set')
+        else:
+            self.writeLog('ViewObserver cannot be set, no active 3D view')
 
     def viewObsCB(self, info):
         """This method is used as the callback for the View observer""" # Reminder : this is how FC works for View observer
