@@ -1,94 +1,120 @@
+### Imports ###
 from PySide2 import QtCore, QtWidgets
 import FreeCADGui as Gui
 
+### Macros ###
 MSG = App.Console.PrintMessage
 
+### Classes ###
 class MyDialog(QtWidgets.QDialog):
+    """MyDialog class defines our own dialog that is super cool"""
+
+    ### Helper classes ###
 
     class MyDocObs():
+        """MyDocObs class handles document observer management
+        It uses a callback mechanism to deliver the messages"""
 
         def __init__(self, msg_callback = None):
-            self.msgcb = msg_callback
+            self.msgcb = msg_callback # register the callback
 
         def callb(self, msg):
-            if self.msgcb:
-                self.msgcb(msg)
+            """Handles call to callback in a unique way"""
+            if self.msgcb: # if callback has been defined
+                self.msgcb(msg) # send it the message
+            else:
+                print(msg) # print the message to stdout
 
-        def slotCreatedDocument(self, doc):
+        def slotCreatedDocument(self, doc): # function name/signature defined by FC DocumentObserver class
             self.callb(f'New document created : {doc.Document.Name}')
 
-        def slotDeletedDocument(self, doc):
+        def slotDeletedDocument(self, doc): # function name/signature defined by FC DocumentObserver
             self.callb(f'Document deleted : {doc.Document.Name}')
 
-        def slotCreatedObject(self, obj):
+        def slotCreatedObject(self, obj): # function name/signature defined by FC DocumentObserver
             self.callb(f'New object created in doc {obj.Object.Document.Name} : {obj.Object.Name}')
 
-        def slotDeletedObject(self, obj):
+        def slotDeletedObject(self, obj): # function name/signature defined by FC DocumentObserver
             self.callb(f'Object deleted in doc {obj.Object.Document.Name} : {obj.Object.Name}')
 
 #        def slotChangedObject(self, obj, prop):
 #            self.callb(f'Property changed in obj {obj.Object.Name} of doc {obj.Object.Document.Name} : {prop}')
 
     class MySelObs(QtCore.QObject):
+        """MySelObs class handles selection observer management
+        It uses a Qt signal/slot mechanism to deliver the messages"""
 
-        preselection = QtCore.Signal(str)
-        selection = QtCore.Signal(str)
-        clear = QtCore.Signal(str)
+        preselection = QtCore.Signal(str) # Signal that emits a string
+        selection = QtCore.Signal(str) # Signal that emits a string
+        clear = QtCore.Signal(str) # Signal that emits a string
 
         def __init__(self):
-            super().__init__()
+            super().__init__() # Needed as class inherits QObject to use signal/slot
 
-        def setPreselection(self,doc,obj,sub):
-            self.preselection.emit(f'Preselection of {sub} of object {obj}')
+        def setPreselection(self,doc,obj,sub): # function name/signature defined by FC SelectionObserver
+            self.preselection.emit(f'Preselection of {sub} of object {obj}') # Emit signal with formatted text
     
-        def addSelection(self,doc,obj,sub,pnt):
-            self.selection.emit(f'Object {obj} added to selection')
+        def addSelection(self,doc,obj,sub,pnt): # function name/signature defined by FC SelectionObserver
+            self.selection.emit(f'Object {obj} added to selection') # Emit signal with formatted text
     
-        def clearSelection(self,doc):
-            self.clear.emit(f'Selection cleared in document {doc}')
+        def clearSelection(self,doc): # function name/signature defined by FC SelectionObserver
+            self.clear.emit(f'Selection cleared in document {doc}') # Emit signal with formatted text
 
-    def __init__(self, parent=Gui.getMainWindow()):
-        super().__init__(parent, QtCore.Qt.Tool)
-        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True)
-        self.setAttribute(QtCore.Qt.WA_WindowPropagation, True)
-        self.initUI()
+    ### END of Helper classes ###
+
+    def __init__(self, parent=Gui.getMainWindow()): # Important for widgets to handle kinship to get consistent behavior
+        super().__init__(parent, QtCore.Qt.Tool) # Using the Tool flag will keep widget on top of parent while not locking operation
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, True) # So widget object is deleted when closed, not just hidden (memory friendly)
+        self.setAttribute(QtCore.Qt.WA_WindowPropagation, True) # So font is propagated from parent to self (needed for windowed widgets)
+        self.setObjectName("MyDialog") # Always a good idea to set an object name if one need to find the widget programatically
+        self.initUI() # Init UI in another function to keep this one clean
 
         self.writeLog('Init terminated')
 
+        ## In FC, a view observer is obtained by registering a callback in a specific view (3D/Inventor)
+        ## Once registered, the callback will be called on specific events with event info as parameter
         if Gui.activeView() and repr(Gui.activeView()) == 'View3DInventor':
             self.view = Gui.activeView()
-            self.view_callback = self.view.addEventCallback('SoEvent', self.viewObsCB)
+            self.view_callback = self.view.addEventCallback('SoEvent', self.viewObsCB) # Register the view observer callback
             self.writeLog('ViewObserver set')
         else:
             self.writeLog('ViewObserver cannot be set, no active 3D view')
 
-        self.doc_observer = self.MyDocObs(self.doc_callback)
-        Gui.addDocumentObserver(self.doc_observer)
+        ## In FC, a document observer is obtained by registering in the GUI instance a class instance ...
+        ## ... whose methods will be called on specific events based on their names
+        self.doc_observer = self.MyDocObs(self.docCallback) # Create an instance of our document observer class (giving to it the callback pointer)
+        Gui.addDocumentObserver(self.doc_observer) # Register the observer in the GUI
 
-        self.sel_observer = self.MySelObs()
-        self.sel_observer.preselection.connect(self.writeSel)
-        self.sel_observer.selection.connect(self.writeSel)
-        self.sel_observer.clear.connect(self.writeSel)
-        Gui.Selection.addObserver(self.sel_observer)
+        ## In FC, a selection observer is obtained by registering in the selection mechanism a class instance ...
+        ## ... whose methods will be called on specific events based on their names
+        self.sel_observer = self.MySelObs() # Create an instance of our selection observer
+        self.sel_observer.preselection.connect(self.writeSel) # Connect signals to our slot method ...
+        self.sel_observer.selection.connect(self.writeSel) # ...
+        self.sel_observer.clear.connect(self.writeSel) # ...
+        Gui.Selection.addObserver(self.sel_observer) # Register the observer in the selection mechanism
 
     def initUI(self):
+        """Specifically handles the UI initialization"""
         self.setWindowTitle('My Super Dialog')
         
-        my_lay = QtWidgets.QGridLayout(self)
+        my_lay = QtWidgets.QGridLayout(self) # Always use layouts to position widgets
         self.setLayout(my_lay)
 
-        my_doc_ob_w = QtWidgets.QWidget(self)
+        ## Define the macro layout. Basically 4 widgets in a 2x2 grid and at the bottom the OK/Cancel button box
+        my_doc_ob_w = QtWidgets.QWidget(self) # Document observer widget
         my_lay.addWidget(my_doc_ob_w, 0, 0)
-        my_sel_ob_w = QtWidgets.QWidget(self)
+        my_sel_ob_w = QtWidgets.QWidget(self) # Selection observer widget
         my_lay.addWidget(my_sel_ob_w, 0, 1)
-        my_view_ob_w = QtWidgets.QWidget(self)
+        my_view_ob_w = QtWidgets.QWidget(self) # View observer widget
         my_lay.addWidget(my_view_ob_w, 1, 0)
-        my_log_w = QtWidgets.QWidget(self)
+        my_log_w = QtWidgets.QWidget(self) # Log widget
         my_lay.addWidget(my_log_w, 1, 1)
-        my_button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self)
-        my_lay.addWidget(my_button_box, 2, 0, 1, -1)
+        my_button_box = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.Ok | QtWidgets.QDialogButtonBox.Cancel, self) # OK/Cancel
+        my_lay.addWidget(my_button_box, 2, 0, 1, -1) # The button box is spanned over all the columns of the grid layout
 
-        my_doc_ob_lay = QtWidgets.QVBoxLayout(my_doc_ob_w)
+        ## Define the content of the Document observer widget
+        my_doc_ob_lay = QtWidgets.QVBoxLayout(my_doc_ob_w) # Define an inner layout (vertical)
+            ## Notice it's possible to directly nest layouts, but using an intermediate widget ease things
         my_doc_ob_w.setLayout(my_doc_ob_lay)
         my_doc_ob_lay.addWidget(QtWidgets.QLabel('Document observer:', my_doc_ob_w))
         self.my_doc_ob = QtWidgets.QPlainTextEdit(my_doc_ob_w)
@@ -96,6 +122,7 @@ class MyDialog(QtWidgets.QDialog):
         self.my_doc_ob.setMaximumBlockCount(100)
         my_doc_ob_lay.addWidget(self.my_doc_ob)
 
+        ## Same for Selection observer
         my_sel_ob_lay = QtWidgets.QVBoxLayout(my_sel_ob_w)
         my_sel_ob_w.setLayout(my_sel_ob_lay)
         my_sel_ob_lay.addWidget(QtWidgets.QLabel('Selection observer:', my_sel_ob_w))
@@ -104,6 +131,7 @@ class MyDialog(QtWidgets.QDialog):
         self.my_sel_ob.setMaximumBlockCount(100)
         my_sel_ob_lay.addWidget(self.my_sel_ob)
 
+        ## Same for View observer
         my_view_ob_lay = QtWidgets.QVBoxLayout(my_view_ob_w)
         my_view_ob_w.setLayout(my_view_ob_lay)
         my_view_ob_lay.addWidget(QtWidgets.QLabel('View observer:', my_view_ob_w))
@@ -112,6 +140,7 @@ class MyDialog(QtWidgets.QDialog):
         self.my_view_ob.setMaximumBlockCount(100)
         my_view_ob_lay.addWidget(self.my_view_ob)
 
+        ## Same for log report
         my_log_lay = QtWidgets.QVBoxLayout(my_log_w)
         my_log_w.setLayout(my_log_lay)
         my_log_lay.addWidget(QtWidgets.QLabel('Log:', my_log_w))
@@ -120,31 +149,39 @@ class MyDialog(QtWidgets.QDialog):
         self.my_log.setMaximumBlockCount(100)
         my_log_lay.addWidget(self.my_log)
 
+        ## Connect the button box buttons signals to the dialog (self) slots
         my_button_box.accepted.connect(self.accept)
         my_button_box.rejected.connect(self.reject)
 
     def viewObsCB(self, info):
-        self.view_log_cnt = self.view_log_cnt+1 if hasattr(self, 'view_log_cnt') else 0
-        self.my_view_ob.appendPlainText(f'{self.view_log_cnt} : Event received of type : {info["Type"]} at position {info["Position"]}')
+        """This method is used as the callback for the View observer""" # Reminder : this is how FC works for View observer
+        self.view_log_cnt = self.view_log_cnt+1 if hasattr(self, 'view_log_cnt') else 0 # Init/increment a static counter to identify event displays
+        self.my_view_ob.appendPlainText(f'{self.view_log_cnt} : Event received of type : {info["Type"]} at position {info["Position"]}') # Display event
 
-    def writeLog(self, text):
-        curr_time = QtCore.QTime.currentTime().toString('hh:mm:ss')
-        self.my_log.appendPlainText(f'{curr_time} : {text}')
-
-    def doc_callback(self, text):
-        self.my_doc_ob.appendPlainText(text)
+    def docCallback(self, text):
+        """This method is used as the callback for our Document observer""" # Reminder : this is how we decided to implement it
+        self.my_doc_ob.appendPlainText(text) # As we receive a formatted text, directly display it
 
     def writeSel(self, text):
-        self.my_sel_ob.appendPlainText(text)
+        """This method is used a the slot that we connect to the Selection observer signals""" # Reminder : this is how we decided to implement it
+        self.my_sel_ob.appendPlainText(text) # As we receive a formatted text, directly display it
 
-    def accept(self):
+    def writeLog(self, text):
+        """This method is an helper to display a timestamped log message"""
+        curr_time = QtCore.QTime.currentTime().toString('hh:mm:ss') # Get current timestamp
+        self.my_log.appendPlainText(f'{curr_time} : {text}') # Append message
+
+    def accept(self): # This method subclasses the one of QDialog...
         MSG('Good bye\n')
-        super().accept()
+        super().accept() # ...so think about calling the superclass method to get things done
 
-    def reject(self):
+    def reject(self): # This method subclasses the one of QDialog ...
         self.writeLog('Why did you try to reject me ? Not possible.')
+        # ...see that if not calling superclass method we'll do nothing
 
     def hideEvent(self, event):
+        """This method subclasses the one of QDialog
+        And takes care of deleting all set observers""" # This is another way of dealing with events
         if hasattr(self, 'view_callback'):
             try:
                 self.view.removeEventCallback('SoEvent', self.view_callback)
@@ -152,7 +189,11 @@ class MyDialog(QtWidgets.QDialog):
                 pass
         Gui.removeDocumentObserver(self.doc_observer)
         Gui.Selection.removeObserver(self.sel_observer)
-        super().hideEvent(event)
-        
+        super().hideEvent(event) # Again think about calling superclass method
 
-MyDialog().show()
+    def closeEvent(self, event): # This method is called only when clicking on the closing cross
+        self.writeLog('Hey, you clicked the cross !')
+        event.ignore() # Prevents the event to be further propagated hence window to be closed
+
+if __name__ == "__main__": # This will be true only if the file is "executed" but not if imported as module
+    MyDialog().show()
